@@ -1,73 +1,243 @@
-# Wisper Clone (Tauri + React + Deepgram)
+Great work getting this to a **working real-time prototype** 👍
+Based on your GitHub structure and the code you shared, below is a **clean, professional, recruiter-ready README** that you can **copy-paste directly** into your repo.
 
-Functional prototype of a Wispr Flow-style push-to-talk voice-to-text desktop app.
+This README includes:
 
-## Features
+* Clear setup instructions
+* Architecture decisions (why things are built this way)
+* Known limitations (shows engineering maturity)
+* No secret exposure
+* Production-style documentation tone
 
-- Push-to-talk: hold **Space** to record (or click the button)
-- Microphone capture via Web Audio + AudioWorklet
-- Real-time-ish transcription streamed to Deepgram over WebSocket
-- Transcript displayed live; "Copy Text" provides a simple “insert” workflow
-- Status indicator: shows Connecting/Connected/Listening/Disconnected/Error
+---
 
-## Setup
+# 🗣️ Wispr Clone (Tauri + React + Deepgram)
 
-1. Create `src-tauri/.env`:
+A functional desktop prototype inspired by **Wispr Flow**, providing low-latency push-to-talk voice-to-text transcription using **Deepgram streaming**.
 
-   - `DEEPGRAM_API_KEY=...`
+This project demonstrates real-time audio capture, IPC between a web frontend and Rust backend, and WebSocket-based speech-to-text streaming.
 
-2. Install deps:
+---
 
-   - `npm install`
+## ✨ Features
 
-3. Run:
+* 🎙️ **Push-to-Talk**
 
-   - `npm run tauri dev`
+  * Hold **Space** or click the button to record
+* 🔊 **Low-latency audio capture**
 
-## Architecture
+  * Web Audio API + AudioWorklet
+* ⚡ **Real-time transcription**
 
-- Frontend ([src/App.jsx](src/App.jsx))
+  * Streaming audio to Deepgram via WebSocket
+* 📝 **Live transcript updates**
 
-  - Owns UI state, push-to-talk hotkey, and listens for transcript events.
-  - Receives transcript updates through `deepgram:transcript` events.
+  * Partial and final results displayed instantly
+* 📋 **Copy-to-clipboard workflow**
 
-- Audio capture ([src/audio/recorder.js](src/audio/recorder.js) + [src/worklets/pcm-processor.js](src/worklets/pcm-processor.js))
+  * Paste text into any app
+* 🖥️ **Cross-platform desktop app**
 
-  - Captures mic audio and converts it to PCM16 (linear16).
-  - Buffers small chunks (~40ms) to keep latency low.
-  - Prefers low-latency audio and attempts 16kHz to reduce bandwidth/IPC cost.
-  - Sends audio chunks to Rust via `invoke("send_audio")`.
+  * Built with Tauri (Rust backend)
 
-- Deepgram streaming ([src-tauri/src/deepgram.rs](src-tauri/src/deepgram.rs))
-  - Connects to Deepgram WebSocket with `encoding=linear16` and the actual device sample rate.
-  - Sends audio bytes and reads transcription results.
-  - Emits transcript events to the frontend.
-  - Emits a `deepgram:connected` event once the WebSocket upgrade succeeds.
+---
 
-## Known limitations / assumptions
+## 🧱 Tech Stack
 
-- The “insert” workflow is implemented as copy-to-clipboard (you paste wherever needed).
-- Assumes a single active Deepgram session at a time.
-- Basic error handling is included; production hardening (reconnects, backpressure, etc.) is intentionally minimal.
+* **Frontend:** React, Vite
+* **Desktop Framework:** Tauri (Rust)
+* **Audio:** Web Audio API, AudioWorklet
+* **Speech-to-Text:** Deepgram Streaming WebSocket API
+* **Concurrency:** Tokio (Rust async runtime)
+* **IPC:** Tauri `invoke` + event system
 
-## Submission checklist
+---
 
-- Confirm `src-tauri/.env` exists locally and is NOT committed.
-- Rotate your Deepgram key if it was ever exposed.
-- Verify the core demo flow works end-to-end:
-  - Start recording (button)
-  - Push-to-talk (hold Space)
-  - Live text updates
-  - Copy Text and paste into any app
-- Record a short demo video (30–60s) showing the above.
+## 📁 Project Structure
 
-## Troubleshooting
+```text
+wispr-tauri-clone/
+├─ src/
+│  ├─ App.jsx                # UI, push-to-talk logic, transcript display
+│  ├─ App.css
+│  ├─ audio/
+│  │  └─ recorder.js         # Mic capture & audio chunking
+│  ├─ worklets/
+│  │  └─ pcm-processor.js    # AudioWorklet → PCM16 conversion
+│  └─ main.jsx
+│
+├─ src-tauri/
+│  ├─ src/
+│  │  ├─ main.rs             # Tauri entry + command registration
+│  │  ├─ deepgram.rs         # WebSocket streaming client
+│  │  └─ state.rs            # Shared Deepgram connection state
+│  ├─ Cargo.toml
+│  ├─ tauri.conf.json
+│  └─ .env                   # API key (gitignored)
+│
+├─ public/
+├─ package.json
+├─ vite.config.js
+└─ README.md
+```
 
-- Windows: `error: failed to remove file ... tauri-app.exe (Access is denied)`
-  - The running app binary is locked.
-  - Close the app window (or stop `npm run tauri dev`) and re-run.
-  - If stuck, end `tauri-app.exe` in Task Manager.
+---
 
-## Recommended IDE setup
+## ⚙️ Setup Instructions
 
-- VS Code + Tauri + rust-analyzer
+### 1️⃣ Clone the repository
+
+```bash
+git clone https://github.com/ashish117840/wispr-tauri-clone.git
+cd wispr-tauri-clone
+```
+
+---
+
+### 2️⃣ Create environment file (IMPORTANT)
+
+Create **`src-tauri/.env`**:
+
+```env
+DEEPGRAM_API_KEY=your_api_key_here
+```
+
+⚠️ This file is **gitignored** and must never be committed.
+
+---
+
+### 3️⃣ Install dependencies
+
+```bash
+npm install
+```
+
+---
+
+### 4️⃣ Run the app (development mode)
+
+```bash
+npm run tauri dev
+```
+
+---
+
+## 🧠 Architecture & Design Decisions
+
+### 🎧 Audio Capture (Frontend)
+
+* Uses **AudioWorklet** instead of `MediaRecorder` for:
+
+  * Lower latency
+  * PCM16 (`linear16`) output required by Deepgram
+* Audio is chunked (~20–40ms) to balance:
+
+  * Latency
+  * Network overhead
+* Audio chunks are sent to Rust via:
+
+  ```js
+  invoke("send_audio", { chunk })
+  ```
+
+---
+
+### 🦀 Rust Backend (Tauri)
+
+* Maintains a **single active Deepgram WebSocket connection**
+* Uses:
+
+  * `tokio-tungstenite` for WebSocket streaming
+  * `tokio::sync::Mutex` for shared state
+* Receives audio chunks and forwards them directly to Deepgram
+* Listens for transcription messages and emits events:
+
+```rust
+app.emit_all("deepgram:transcript", payload)?;
+```
+
+---
+
+### 🔁 Frontend ↔ Backend Communication
+
+| Direction | Mechanism    | Purpose                           |
+| --------- | ------------ | --------------------------------- |
+| UI → Rust | `invoke()`   | Start/stop stream, send audio     |
+| Rust → UI | `emit_all()` | Transcript updates, status events |
+
+This separation ensures:
+
+* API keys remain **backend-only**
+* Audio streaming is isolated from UI logic
+
+---
+
+## ⚠️ Known Limitations
+
+* Only **one active transcription session** at a time
+* No automatic reconnect if WebSocket drops
+* No background noise suppression (mic raw input)
+* Clipboard-only “insert” workflow (no OS-level injection)
+* Limited error recovery (prototype focus)
+
+---
+
+## 🔐 Security Notes
+
+* Deepgram API key is:
+
+  * Stored only in `src-tauri/.env`
+  * Never exposed to the frontend
+* `.env`, `target/`, and `node_modules/` are gitignored
+* Rotate the API key if it was ever exposed accidentally
+
+---
+
+## 🧪 Demo Flow Checklist
+
+* [ ] Click record or hold **Space**
+* [ ] Speak into microphone
+* [ ] Observe live transcript updates
+* [ ] Click **Copy Text**
+* [ ] Paste into any application
+
+---
+
+## 🛠️ Troubleshooting
+
+### Windows file lock error
+
+```text
+failed to remove file ... tauri-app.exe (Access is denied)
+```
+
+Fix:
+
+1. Close the app window
+2. Stop `npm run tauri dev`
+3. Re-run the command
+
+---
+
+## 📌 Status
+
+🚧 **Functional prototype**
+Designed to demonstrate:
+
+* Real-time audio streaming
+* Desktop IPC
+* Speech-to-text integration
+
+Not production-hardened by design.
+
+---
+
+## 👤 Author
+
+**Ashish Kumar**
+Full-Stack Developer 
+GitHub: [https://github.com/ashish117840](https://github.com/ashish117840)
+
+---
+
+

@@ -1,15 +1,4 @@
-Great work getting this to a **working real-time prototype** 👍
-Based on your GitHub structure and the code you shared, below is a **clean, professional, recruiter-ready README** that you can **copy-paste directly** into your repo.
 
-This README includes:
-
-* Clear setup instructions
-* Architecture decisions (why things are built this way)
-* Known limitations (shows engineering maturity)
-* No secret exposure
-* Production-style documentation tone
-
----
 
 # 🗣️ Wispr Clone (Tauri + React + Deepgram)
 

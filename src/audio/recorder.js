@@ -8,7 +8,11 @@ let gainNode;
 let pendingSends = 0;
 
 export async function startRecording({ onSampleRate } = {}) {
-  if (audioContext) return audioContext.sampleRate;
+  // If a previous session is still tearing down, clean it up so a new start
+  // doesn't become a no-op (which can feel like the button needs multiple clicks).
+  if (audioContext || stream || source || workletNode || gainNode) {
+    await stopRecording();
+  }
 
   stream = await navigator.mediaDevices.getUserMedia({
     audio: {

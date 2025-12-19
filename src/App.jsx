@@ -4,12 +4,79 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 
+function normalizeToken(token) {
+  return token.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+}
+
+function smoothTranscript(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return "";
+
+  const tokens = trimmed.split(/\s+/g);
+  const out = [];
+
+  let prevNorm = "";
+  for (const token of tokens) {
+    const norm = normalizeToken(token);
+    if (norm && norm === prevNorm) continue;
+    out.push(token);
+    prevNorm = norm;
+  }
+
+  return out.join(" ");
+}
+
+function formatUserError(err) {
+  const message =
+    typeof err === "string"
+      ? err
+      : err && typeof err.message === "string"
+      ? err.message
+      : String(err);
+
+  // Browser mic errors.
+  const name = err && typeof err.name === "string" ? err.name : "";
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Microphone permission denied. Please allow mic access and try again.";
+  }
+  if (name === "NotFoundError") {
+    return "No microphone device found. Please connect a mic and try again.";
+  }
+  if (name === "NotReadableError") {
+    return "Microphone is in use by another app. Close other apps using the mic and try again.";
+  }
+  if (name === "OverconstrainedError") {
+    return "Your microphone settings are not supported on this device.";
+  }
+
+  // Deepgram / backend errors.
+  if (/DEEPGRAM_API_KEY/i.test(message)) {
+    return "Deepgram API key not found. Set DEEPGRAM_API_KEY in src-tauri/.env and restart the app.";
+  }
+  if (/handshake failed/i.test(message) || /HTTP\s+\d{3}/i.test(message)) {
+    return `Deepgram connection failed. ${message}`;
+  }
+  if (/socket closed/i.test(message)) {
+    return "Connection closed unexpectedly. Please try again.";
+  }
+
+  // Network hints.
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return "You appear to be offline. Check your internet connection and try again.";
+  }
+
+  return message;
+}
+
 function App() {
   const [isRecording, setIsRecording] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
+  const [status, setStatus] = useState("Idle");
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [error, setError] = useState("");
   const isRecordingRef = useRef(false);
+  const busyRef = useRef(false);
 
   useEffect(() => {
     isRecordingRef.current = isRecording;
@@ -17,15 +84,17 @@ function App() {
 
   useEffect(() => {
     let disposed = false;
-    let unlisten = null;
+    let unlistenTranscript = null;
+    let unlistenClosed = null;
+    let unlistenConnected = null;
 
-    const unlistenPromise = listen("deepgram:transcript", (event) => {
+    const unlistenTranscriptPromise = listen("deepgram:transcript", (event) => {
       const payload = event.payload;
       if (!payload || typeof payload.transcript !== "string") return;
 
       // Deepgram interim/final messages commonly contain the full utterance-so-far.
       // We only "commit" to the final transcript when Deepgram marks the utterance as speech_final.
-      const nextUtterance = payload.transcript;
+      const nextUtterance = smoothTranscript(payload.transcript);
       const speechFinal = Boolean(payload.speech_final);
 
       if (speechFinal) {
@@ -38,13 +107,48 @@ function App() {
       }
     });
 
-    unlistenPromise
+    const unlistenClosedPromise = listen("deepgram:closed", () => {
+      // If Deepgram disconnects mid-session, surface it as a status change.
+      setStatus((prev) =>
+        prev === "Listening" || prev === "Connected" ? "Disconnected" : prev
+      );
+    });
+
+    const unlistenConnectedPromise = listen("deepgram:connected", () => {
+      setStatus("Connected");
+    });
+
+    unlistenTranscriptPromise
       .then((fn) => {
         if (disposed) {
           fn();
           return;
         }
-        unlisten = fn;
+        unlistenTranscript = fn;
+      })
+      .catch(() => {
+        // ignore
+      });
+
+    unlistenClosedPromise
+      .then((fn) => {
+        if (disposed) {
+          fn();
+          return;
+        }
+        unlistenClosed = fn;
+      })
+      .catch(() => {
+        // ignore
+      });
+
+    unlistenConnectedPromise
+      .then((fn) => {
+        if (disposed) {
+          fn();
+          return;
+        }
+        unlistenConnected = fn;
       })
       .catch(() => {
         // ignore
@@ -52,11 +156,19 @@ function App() {
 
     return () => {
       disposed = true;
-      if (unlisten) unlisten();
+      if (unlistenTranscript) unlistenTranscript();
+      if (unlistenClosed) unlistenClosed();
+      if (unlistenConnected) unlistenConnected();
     };
   }, []);
 
   async function start() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setIsBusy(true);
+
+    setStatus("Starting...");
+
     setError("");
     setFinalTranscript("");
     setInterimTranscript("");
@@ -68,8 +180,11 @@ function App() {
         },
       });
       setIsRecording(true);
+      // Prefer "Connected" once Deepgram confirms; fall back to "Listening".
+      setStatus((prev) => (prev === "Connected" ? "Connected" : "Listening"));
     } catch (e) {
-      setError(String(e));
+      setError(formatUserError(e));
+      setStatus("Error");
       setIsRecording(false);
       try {
         await stopRecording();
@@ -81,10 +196,19 @@ function App() {
       } catch {
         // ignore
       }
+    } finally {
+      busyRef.current = false;
+      setIsBusy(false);
     }
   }
 
   async function stop() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setIsBusy(true);
+
+    setStatus("Stopping...");
+
     setError("");
     try {
       await stopRecording();
@@ -92,13 +216,22 @@ function App() {
       try {
         await invoke("stop_deepgram");
       } catch (e) {
-        setError(String(e));
+        setError(formatUserError(e));
+        setStatus("Error");
       }
       setIsRecording(false);
+
+      if (!error) {
+        setStatus("Idle");
+      }
+
+      busyRef.current = false;
+      setIsBusy(false);
     }
   }
 
   async function toggleRecording() {
+    if (busyRef.current) return;
     if (!isRecording) {
       await start();
     } else {
@@ -166,11 +299,17 @@ function App() {
       <button
         className={`mic-button ${isRecording ? "recording" : ""}`}
         onClick={toggleRecording}
+        disabled={isBusy}
       >
-        {isRecording ? "Stop Recording" : "Start Recording"}
+        {isBusy
+          ? "Working..."
+          : isRecording
+          ? "Stop Recording"
+          : "Start Recording"}
       </button>
 
       <div className="output">
+        <p className="recording-hint">Status: {error ? "Error" : status}</p>
         <p>
           {error
             ? error

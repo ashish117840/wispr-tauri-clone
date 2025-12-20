@@ -5,8 +5,17 @@
 A functional desktop prototype inspired by **Wispr Flow**, providing low-latency push-to-talk voice-to-text transcription using **Deepgram streaming**.
 
 This project demonstrates real-time audio capture, IPC between a web frontend and Rust backend, and WebSocket-based speech-to-text streaming.
+---
+## 📸 Screenshot
+
+
+<img width="1918" height="1024" alt="Screenshot 2025-12-21 013057" src="https://github.com/user-attachments/assets/d6a28728-1d49-4dd6-8134-ddd28a683131" />
+
+<img width="1919" height="1021" alt="Screenshot 2025-12-21 013033" src="https://github.com/user-attachments/assets/efce785e-9d0e-41ab-b09b-3af24cf58754" />
+
 
 ---
+
 ## 🎥 Demo Video
 
 ▶️ **Watch the demo video:**  

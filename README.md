@@ -7,6 +7,15 @@ A functional desktop prototype inspired by **Wispr Flow**, providing low-latency
 This project demonstrates real-time audio capture, IPC between a web frontend and Rust backend, and WebSocket-based speech-to-text streaming.
 
 ---
+## 🎥 Demo Video
+
+▶️ **Watch the demo video:**  
+[https://drive.google.com/file/d/XXXXXXXX/view?usp=sharing](https://drive.google.com/file/d/1ZkHmv-mVkt9D5dugH2u3T9fG64SLJgJF/view?usp=sharing)
+
+> Note: The demo video was recorded in a single take.  
+> For best clarity, please increase system volume slightly while watching.
+
+---
 
 ## ✨ Features
 
